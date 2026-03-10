@@ -1,29 +1,23 @@
 # Synapse Swarm
 
 A minimal multi-agent orchestrator for [Claude Code](https://docs.anthropic.com/en/docs/claude-code).
-Type a task → Claude decomposes it → parallel agents work in isolated git worktrees, each in its own [cmux](https://cmux.app) workspace.
+One command opens a [cmux](https://cmux.app) workspace with a split layout — type a task, agents spin up in parallel.
 
-## How It Works
+## Layout
 
 ```
-$ cd /your/project && /path/to/swarm/bin/swarm
-
-cmux opens a new workspace:
-
-  どんな作業をしますか？ > ログイン機能を追加して
-
-  タスクを分解中...
-
-  サブタスク:
-    1. [task-1] フロントエンドのログインUI実装
-    2. [task-2] バックエンド認証APIの実装
-    3. [task-3] テストの作成
-
-  エージェントを起動中...
+┌──────────────────────┬──────────────────────┐
+│                      │  [task-1][task-2]...  │
+│    Orchestrator      ├──────────────────────┤
+│                      │                      │
+│  どんな作業をしますか │   workers run here   │
+│  ？ > ___            │   as surface tabs     │
+│                      │                      │
+└──────────────────────┴──────────────────────┘
 ```
 
-Three more cmux workspaces open automatically — one per subtask.
-Each agent works in its own git branch and commits when done.
+Left pane: orchestrator — you type the task here
+Right pane: workers appear as tabs as they're spawned
 
 ## Prerequisites
 
@@ -34,20 +28,26 @@ Each agent works in its own git branch and commits when done.
 ## Usage
 
 ```bash
-cd /path/to/your/project
-/path/to/swarm/bin/swarm
+# Run in current directory
+bin/swarm
+
+# Specify a project path
+bin/swarm ~/path/to/project
 ```
 
-Switch between cmux workspaces (`swarm: task-1`, `swarm: task-2`, …) to watch each agent work.
+1. A `swarm` workspace opens in cmux
+2. Type your task in the left pane
+3. Claude decomposes it; workers appear as tabs in the right pane
+4. Each worker runs Claude in its own git worktree and commits when done
 
 **Worktrees** are created at `.worktrees/<session>/<task-id>/` inside your project.
-Each agent commits its changes to `swarm/<session>/<task-id>` branch when done.
+Branch names follow the pattern `swarm/<session>/<task-id>`.
 
 ## Structure
 
 ```
 bin/
-  swarm           # entry point — opens orchestrator workspace in cmux
+  swarm           # entry point
   _orchestrate    # task input → decompose → spawn workers (internal)
   _worker         # run one subtask in a worktree (internal)
 lib/
@@ -60,9 +60,7 @@ roles/
 
 ## Customizing Prompts
 
-Edit `roles/orchestrator.md` to change how tasks are decomposed.
-Edit `roles/worker.md` to change how workers approach tasks.
-The `{{TASK}}` placeholder is replaced at runtime.
+Edit files in `roles/`. The `{{TASK}}` placeholder is replaced at runtime.
 
 ## License
 

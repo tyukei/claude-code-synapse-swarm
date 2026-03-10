@@ -1,24 +1,33 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Synapse Swarm — タスクを並列エージェントで実行する
-# 使い方: cd /path/to/your/project && /path/to/swarm/bin/swarm
+# Synapse Swarm
+# 使い方: bin/swarm [プロジェクトのパス]
 
 SYNAPSE_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-TARGET="$(pwd)"
+TARGET="${1:-$(pwd)}"
 SESSION="swarm-$(date +%H%M%S)"
 
 if ! command -v cmux &>/dev/null; then
     echo "エラー: cmux が必要です"
     exit 1
 fi
-
 if ! command -v claude &>/dev/null; then
     echo "エラー: Claude CLI が必要です"
     exit 1
 fi
 
-# オーケストレーターを新しい cmux ワークスペースで起動
-cmux new-workspace \
-    --command "SYNAPSE_ROOT=$(printf '%q' "$SYNAPSE_ROOT") TARGET=$(printf '%q' "$TARGET") SESSION=$(printf '%q' "$SESSION") bash $(printf '%q' "${SYNAPSE_ROOT}/bin/_orchestrate")" \
-    --name "swarm: orchestrator"
+# 現在のワークスペース一覧を取得（差分で新しいワークスペースを特定するため）
+WS_BEFORE=$(cmux --id-format refs list-workspaces 2>/dev/null | grep "^workspace:" | sort)
+
+# オーケストレーターを新しいワークスペースで起動
+ORCH_CMD="SYNAPSE_ROOT=$(printf '%q' "$SYNAPSE_ROOT") TARGET=$(printf '%q' "$TARGET") SESSION=$(printf '%q' "$SESSION") bash $(printf '%q' "${SYNAPSE_ROOT}/bin/_orchestrate")"
+cmux new-workspace --command "$ORCH_CMD"
+
+# 新しいワークスペースの ref を特定してリネーム
+sleep 0.5
+WS_AFTER=$(cmux --id-format refs list-workspaces 2>/dev/null | grep "^workspace:" | sort)
+NEW_WS=$(comm -13 <(echo "$WS_BEFORE") <(echo "$WS_AFTER") | tail -1)
+if [[ -n "$NEW_WS" ]]; then
+    cmux rename-workspace --workspace "$NEW_WS" "swarm" 2>/dev/null || true
+fi

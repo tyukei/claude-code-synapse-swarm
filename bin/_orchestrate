@@ -1,12 +1,23 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# オーケストレーター — タスクを受け取ってサブタスクに分解し、並列エージェントを起動する
-# bin/swarm から呼ばれる内部スクリプト
+# オーケストレーター（bin/swarm から起動される内部スクリプト）
+# $CMUX_WORKSPACE_ID が自動でセットされているので cmux コマンドは現在のワークスペースに作用する
 
-source "${SYNAPSE_ROOT}/lib/log.sh"
 source "${SYNAPSE_ROOT}/lib/worktree.sh"
 
+# ── 右ペインを作成してワーカー用に確保 ──────────────────────────
+PANE_BEFORE=$(cmux list-panes 2>/dev/null | grep "^pane:" | sort)
+cmux new-pane --direction right 2>/dev/null
+sleep 0.4
+PANE_AFTER=$(cmux list-panes 2>/dev/null | grep "^pane:" | sort)
+RIGHT_PANE=$(comm -13 <(echo "$PANE_BEFORE") <(echo "$PANE_AFTER") | tail -1)
+
+# 左ペイン（オーケストレーター）にフォーカスを戻す
+LEFT_PANE=$(echo "$PANE_BEFORE" | head -1)
+cmux focus-pane --pane "$LEFT_PANE" 2>/dev/null || true
+
+# ── ユーザー入力 ──────────────────────────────────────────────
 clear
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 echo "  Synapse Swarm"
@@ -25,22 +36,18 @@ fi
 
 echo "タスクを分解中..."
 
-# オーケストレータープロンプトを構築
+# ── Claude でタスクを分解 ──────────────────────────────────────
 PROMPT_TEMPLATE=$(cat "${SYNAPSE_ROOT}/roles/orchestrator.md")
 PROMPT="${PROMPT_TEMPLATE//\{\{TASK\}\}/$TASK}"
 
-# Claude でタスクを分解（JSON のみ出力させる）
 RAW=$(cd "$TARGET" && claude \
     --model claude-sonnet-4-6 \
     --dangerously-skip-permissions \
     --print "$PROMPT" 2>/dev/null)
 
-# JSON を抽出（```json ブロックにも対応）
 JSON=$(python3 - "$RAW" <<'PYEOF'
 import sys, re, json
-
 text = sys.argv[1] if len(sys.argv) > 1 else sys.stdin.read()
-
 m = re.search(r'```(?:json)?\s*(\{.*?\})\s*```', text, re.DOTALL)
 if m:
     print(m.group(1))
@@ -52,13 +59,13 @@ PYEOF
 )
 
 if [[ -z "$JSON" ]]; then
-    echo "エラー: タスクの分解に失敗しました。Claudeの出力:"
+    echo "エラー: タスクの分解に失敗しました。"
     echo "$RAW"
     read -p "Enterで閉じる..."
     exit 1
 fi
 
-# サブタスク一覧を表示
+# ── サブタスク一覧を表示 ──────────────────────────────────────
 echo ""
 echo "サブタスク:"
 python3 - "$JSON" <<'PYEOF'
@@ -69,9 +76,8 @@ for i, t in enumerate(data['tasks'], 1):
 PYEOF
 echo ""
 echo "エージェントを起動中..."
-echo ""
 
-# 各サブタスクの worktree を作成して cmux ワークスペースで worker を起動
+# ── 各ワーカーを右ペインのサーフェス（タブ）として起動 ──────────
 python3 - "$JSON" <<'PYEOF' | while IFS=$'\t' read -r task_id task_desc; do
 import sys, json
 data = json.loads(sys.argv[1])
@@ -80,14 +86,25 @@ for t in data['tasks']:
 PYEOF
     worktree_path=$(worktree_create "$SESSION" "$task_id" "$TARGET")
 
-    cmux new-workspace \
-        --command "SYNAPSE_ROOT=$(printf '%q' "$SYNAPSE_ROOT") bash $(printf '%q' "${SYNAPSE_ROOT}/bin/_worker") $(printf '%q' "$worktree_path") $(printf '%q' "$task_id") $(printf '%q' "$task_desc")" \
-        --name "swarm: ${task_id}"
+    # 右ペインに新しいサーフェス（タブ）を作成
+    SURF_BEFORE=$(cmux list-pane-surfaces --pane "$RIGHT_PANE" 2>/dev/null | grep "^surface:" | sort)
+    cmux new-surface --pane "$RIGHT_PANE" --type terminal 2>/dev/null
+    sleep 0.8  # シェル起動待ち
+    SURF_AFTER=$(cmux list-pane-surfaces --pane "$RIGHT_PANE" 2>/dev/null | grep "^surface:" | sort)
+    NEW_SURF=$(comm -13 <(echo "$SURF_BEFORE") <(echo "$SURF_AFTER") | tail -1)
+
+    # タブ名をタスクIDに設定
+    cmux rename-tab --surface "$NEW_SURF" "$task_id" 2>/dev/null || true
+
+    # ワーカーコマンドを送信
+    WORKER_CMD="SYNAPSE_ROOT=$(printf '%q' "$SYNAPSE_ROOT") bash $(printf '%q' "${SYNAPSE_ROOT}/bin/_worker") $(printf '%q' "$worktree_path") $(printf '%q' "$task_id") $(printf '%q' "$task_desc")"
+    cmux send --surface "$NEW_SURF" "$WORKER_CMD"
+    cmux send-key --surface "$NEW_SURF" Enter
 
     echo "  起動: ${task_id}"
 done
 
 echo ""
-echo "全エージェントを起動しました。cmux のワークスペースを切り替えて確認してください。"
+echo "右ペインのタブで各エージェントの作業を確認できます。"
 echo ""
 read -p "Enterで閉じる..."
