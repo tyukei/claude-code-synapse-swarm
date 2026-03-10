@@ -1,12 +1,22 @@
 #!/usr/bin/env bash
 # Unified multiplexer abstraction for Synapse Swarm.
 #
-# Auto-detects the available backend (cmux > tmux) or reads from config.
-# Provides mux_* functions that delegate to the chosen backend.
+# Supports two backends:
+#   cmux  — macOS-only (cmux terminal app). Provides workspace management
+#           and sidebar status/progress. Requires cmux daemon to be running.
+#   tmux  — Cross-platform. Works on macOS, Linux, and in containers.
+#
+# Auto-detection order: cmux (if daemon running) → tmux → none (sequential)
+#
+# In containers / DevContainers:
+#   cmux is NOT available (macOS-only). Set MUX_BACKEND=tmux explicitly via
+#   the Dockerfile ENV or devcontainer.json containerEnv, or let auto-detect
+#   fall back to tmux automatically.
 #
 # Usage:
-#   source lib/mux.sh        # auto-detect
-#   MUX_BACKEND=tmux source lib/mux.sh  # force backend
+#   source lib/mux.sh              # auto-detect
+#   MUX_BACKEND=tmux source lib/mux.sh   # force tmux (containers)
+#   MUX_BACKEND=none source lib/mux.sh   # sequential, no multiplexer
 
 source "${SYNAPSE_ROOT}/lib/log.sh"
 

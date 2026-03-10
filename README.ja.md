@@ -199,6 +199,50 @@ bin/teardown <session>
 bin/teardown <session> --keep-branches
 ```
 
+## コンテナ / DevContainer での実行
+
+Synapse Swarm はコンテナ環境で動作します。**cmux は macOS 専用**のため、コンテナ内では利用できません。Dockerfile に `MUX_BACKEND=tmux` が設定されており、自動的に tmux が使用されます。
+
+### DevContainer（VSCode）
+
+```bash
+# 1. ホストシェルで API キーを設定
+export ANTHROPIC_API_KEY=sk-ant-...
+
+# 2. VSCode でフォルダを開き「Reopen in Container」をクリック
+#    （このリポジトリに .devcontainer/ が含まれています）
+
+# 3. コンテナ内で通常どおり実行
+bin/swarm --task "REST API を構築する" --roles planner,coder,tester
+```
+
+`devcontainer.json` がホスト環境の `ANTHROPIC_API_KEY` を自動的にコンテナへ転送します。
+
+### スタンドアロン Docker
+
+```bash
+# ビルド
+docker build -t synapse-swarm .
+
+# 実行（プロジェクトを /workspace にマウント）
+docker run -it \
+  -e ANTHROPIC_API_KEY=sk-ant-... \
+  -v $(pwd):/workspace \
+  synapse-swarm
+
+# コンテナ内で実行
+bin/swarm --task "タスクをここに記述" --roles planner,coder,tester
+```
+
+### 環境別の mux バックエンド
+
+| 環境 | バックエンド | 設定方法 |
+|------|------------|---------|
+| macOS + cmux アプリ起動中 | cmux | 自動検出 |
+| macOS + tmux | tmux | 自動検出 |
+| Linux / コンテナ | tmux | Dockerfile の `MUX_BACKEND=tmux` |
+| CI / ヘッドレス | none | `--no-mux` フラグ |
+
 ## カスタマイズ
 
 ### 新しいロールを追加する

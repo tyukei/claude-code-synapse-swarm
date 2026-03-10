@@ -196,6 +196,50 @@ bin/teardown <session>
 bin/teardown <session> --keep-branches
 ```
 
+## Running in a Container / DevContainer
+
+Synapse Swarm works in containers. **cmux is macOS-only** and unavailable in containers; the swarm automatically uses tmux instead (set via `MUX_BACKEND=tmux` in the Dockerfile).
+
+### DevContainer (VSCode)
+
+```bash
+# 1. Set your API key in the host shell
+export ANTHROPIC_API_KEY=sk-ant-...
+
+# 2. Open in VSCode and click "Reopen in Container"
+#    (.devcontainer/ is included in this repo)
+
+# 3. Inside the container, run as normal
+bin/swarm --task "Build a REST API" --roles planner,coder,tester
+```
+
+The `devcontainer.json` automatically forwards `ANTHROPIC_API_KEY` from your host environment.
+
+### Standalone Docker
+
+```bash
+# Build
+docker build -t synapse-swarm .
+
+# Run (mount your project into /workspace)
+docker run -it \
+  -e ANTHROPIC_API_KEY=sk-ant-... \
+  -v $(pwd):/workspace \
+  synapse-swarm
+
+# Inside the container
+bin/swarm --task "Your task here" --roles planner,coder,tester
+```
+
+### Mux backend per environment
+
+| Environment | Backend | How |
+|-------------|---------|-----|
+| macOS + cmux app running | cmux | auto-detected |
+| macOS + tmux | tmux | auto-detected |
+| Linux / container | tmux | `MUX_BACKEND=tmux` (set in Dockerfile) |
+| CI / headless | none | `--no-mux` flag |
+
 ## Customization
 
 ### Adding a New Role
