@@ -1,0 +1,47 @@
+# Synapse Swarm — Role Definitions
+#
+# Each role maps to a prompt template in roles/<name>.md
+# Roles can be enabled/disabled per task.
+
+roles:
+  planner:
+    description: "Decomposes the task into subtasks and creates a plan"
+    phase: 1          # Runs first, before other agents
+    prompt: roles/planner.md
+    model: opus
+
+  architect:
+    description: "Designs system architecture, interfaces, and data flow"
+    phase: 2
+    prompt: roles/architect.md
+    model: opus
+
+  coder:
+    description: "Implements the code based on the plan and architecture"
+    phase: 2
+    prompt: roles/coder.md
+    model: opus
+
+  tester:
+    description: "Writes and runs tests for the implementation"
+    phase: 3          # Runs after coder
+    prompt: roles/tester.md
+    model: opus
+
+  reviewer:
+    description: "Reviews code for quality, security, and correctness"
+    phase: 3
+    prompt: roles/reviewer.md
+    model: opus
+
+  docs:
+    description: "Writes documentation, README updates, and inline docs"
+    phase: 3
+    prompt: roles/docs.md
+    model: sonnet
+
+  memory:
+    description: "Maintains project memory, tracks decisions and context"
+    phase: 1          # Runs early to provide context
+    prompt: roles/memory.md
+    model: sonnet

@@ -1,0 +1,17 @@
+# Example task definition for Synapse Swarm
+#
+# Copy this file and modify for your task:
+#   cp tasks/example.yaml tasks/my-task.yaml
+
+description: >
+  Build a simple HTTP server with health check endpoint,
+  structured logging, and graceful shutdown.
+  Use Node.js with no external dependencies beyond the standard library.
+
+roles:
+  - planner
+  - architect
+  - coder
+  - tester
+  - reviewer
+  - docs

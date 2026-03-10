@@ -1,0 +1,8 @@
+output/*
+!output/.gitkeep
+tasks/*
+!tasks/example.yaml
+!tasks/.gitkeep
+.worktrees/
+*.log
+.DS_Store

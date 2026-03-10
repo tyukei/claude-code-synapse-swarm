@@ -1,0 +1,59 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# Spawn a single Claude Code agent in a worktree with a role prompt.
+# Usage: spawn-agent <session> <role> <task_description> [--model <model>]
+
+SYNAPSE_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+export SYNAPSE_ROOT
+
+source "${SYNAPSE_ROOT}/lib/log.sh"
+source "${SYNAPSE_ROOT}/lib/worktree.sh"
+source "${SYNAPSE_ROOT}/lib/task.sh"
+
+session="${1:?Usage: spawn-agent <session> <role> <task_description>}"
+role="${2:?Usage: spawn-agent <session> <role> <task_description>}"
+task_desc="${3:?Usage: spawn-agent <session> <role> <task_description>}"
+model="${4:-opus}"
+
+log_section "Spawning agent: ${role}"
+
+# Create worktree
+worktree_path=$(worktree_create "$session" "$role")
+if [[ -z "$worktree_path" ]]; then
+    log_error "Failed to create worktree for ${role}"
+    exit 1
+fi
+
+# Resolve prompt template
+template="${SYNAPSE_ROOT}/roles/${role}.md"
+if [[ ! -f "$template" ]]; then
+    log_error "No prompt template found: ${template}"
+    exit 1
+fi
+
+# Render prompt
+prompt=$(task_render_prompt "$template" "$task_desc")
+
+# Log the invocation
+log_to_file "${SYNAPSE_ROOT}/output/${session}.log" "Spawning ${role} in ${worktree_path}"
+
+# Run Claude Code in the worktree
+cd "$worktree_path"
+
+log_info "Running Claude Code as ${role} (model: ${model})..."
+claude --model "$model" --dangerously-skip-permissions --print "$prompt" 2>&1 | tee "${SYNAPSE_ROOT}/output/${session}-${role}.log"
+
+# Auto-commit any changes
+if [[ -n "$(git -C "$worktree_path" status --porcelain)" ]]; then
+    git -C "$worktree_path" add -A
+    git -C "$worktree_path" commit -m "swarm(${role}): automated changes from ${role} agent
+
+Session: ${session}
+Role: ${role}"
+    log_ok "${role}: Changes committed on branch swarm/${session}/${role}"
+else
+    log_info "${role}: No changes to commit"
+fi
+
+log_ok "Agent ${role} completed"
