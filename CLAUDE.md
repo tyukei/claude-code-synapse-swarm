@@ -1,18 +1,24 @@
 # Synapse Swarm — CLAUDE.md
 
-This repository is a multi-agent orchestration framework for Claude Code.
-It uses tmux + git worktrees to run specialized agents in parallel.
+タスクを複数の Claude Code エージェントに分解して並列実行するツール。
+tmux + git worktree で各エージェントが独立した環境で作業する。
 
-## Structure
-- `bin/` — Executable scripts (swarm, spawn-agent, collect, merge, teardown)
-- `lib/` — Shared shell libraries (worktree, tmux, task, log helpers)
-- `roles/` — Prompt templates for each agent role (markdown files)
-- `config/` — YAML configuration for swarm behavior and role definitions
-- `tasks/` — Task definition files (user-created)
-- `output/` — Collected agent outputs
+## 構造
+- `bin/swarm`        — エントリーポイント。tmux セッションを作成して起動
+- `bin/_orchestrate` — タスク入力・分解・エージェント起動（内部用）
+- `bin/_worker`      — 単一サブタスクを worktree で実行（内部用）
+- `lib/worktree.sh`  — git worktree の作成ヘルパー
+- `lib/log.sh`       — ログユーティリティ
+- `roles/orchestrator.md` — タスク分解プロンプト（日本語）
+- `roles/worker.md`       — ワーカー実行プロンプト（日本語）
 
-## Conventions
-- All scripts use bash with `set -euo pipefail`
-- Scripts are meant to be run from the repository root
-- Agent branches follow the pattern `swarm/<session>/<role>`
-- Worktrees are created under `.worktrees/`
+## 使い方
+```bash
+cd /path/to/your/project
+/path/to/swarm/bin/swarm
+```
+
+## 規約
+- スクリプトは `bash` + `set -euo pipefail`
+- worktree は `TARGET/.worktrees/SESSION/TASK_ID/` に作成
+- ブランチ名は `swarm/SESSION/TASK_ID`

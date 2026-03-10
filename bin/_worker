@@ -1,0 +1,41 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# ワーカー — 単一サブタスクを worktree で実行する
+# _orchestrate から呼ばれる内部スクリプト
+
+worktree_path="$1"
+task_id="$2"
+task_desc="$3"
+
+clear
+echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+echo "  エージェント: ${task_id}"
+echo "  作業ディレクトリ: ${worktree_path}"
+echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+echo ""
+
+PROMPT_TEMPLATE=$(cat "${SYNAPSE_ROOT}/roles/worker.md")
+PROMPT="${PROMPT_TEMPLATE//\{\{TASK\}\}/$task_desc}"
+
+cd "$worktree_path"
+
+claude \
+    --model claude-sonnet-4-6 \
+    --dangerously-skip-permissions \
+    --print "$PROMPT"
+
+# 変更をコミット
+if [[ -n "$(git status --porcelain)" ]]; then
+    git add -A
+    git commit -m "swarm(${task_id}): ${task_desc}"
+    echo ""
+    echo "変更をコミットしました: swarm/${task_id}"
+else
+    echo ""
+    echo "変更なし"
+fi
+
+echo ""
+echo "━━━ 完了 ━━━"
+read -p "Enterで終了..."

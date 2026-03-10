@@ -1,0 +1,94 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# オーケストレーター — タスクを受け取ってサブタスクに分解し、並列エージェントを起動する
+# bin/swarm から呼ばれる内部スクリプト
+
+source "${SYNAPSE_ROOT}/lib/log.sh"
+source "${SYNAPSE_ROOT}/lib/worktree.sh"
+
+clear
+echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+echo "  Synapse Swarm"
+echo "  対象リポジトリ: ${TARGET}"
+echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+echo ""
+echo -n "どんな作業をしますか？ > "
+read -r TASK
+echo ""
+
+if [[ -z "$TASK" ]]; then
+    echo "タスクが入力されていません。終了します。"
+    exit 0
+fi
+
+echo "タスクを分解中..."
+echo ""
+
+# オーケストレータープロンプトを構築
+PROMPT_TEMPLATE=$(cat "${SYNAPSE_ROOT}/roles/orchestrator.md")
+PROMPT="${PROMPT_TEMPLATE//\{\{TASK\}\}/$TASK}"
+
+# Claude でタスクを分解（JSON のみ出力させる）
+RAW=$(cd "$TARGET" && claude \
+    --model claude-sonnet-4-6 \
+    --dangerously-skip-permissions \
+    --print "$PROMPT" 2>/dev/null)
+
+# JSON を抽出（```json ブロックにも対応）
+JSON=$(python3 - "$RAW" <<'PYEOF'
+import sys, re, json
+
+text = sys.argv[1] if len(sys.argv) > 1 else sys.stdin.read()
+
+# ```json ... ``` ブロックを優先
+m = re.search(r'```(?:json)?\s*(\{.*?\})\s*```', text, re.DOTALL)
+if m:
+    print(m.group(1))
+else:
+    # 生の JSON オブジェクトを探す
+    m = re.search(r'\{.*\}', text, re.DOTALL)
+    if m:
+        print(m.group(0))
+PYEOF
+)
+
+if [[ -z "$JSON" ]]; then
+    echo "エラー: タスクの分解に失敗しました。Claudeの出力:"
+    echo "$RAW"
+    read -p "Enterで終了..."
+    exit 1
+fi
+
+# サブタスク一覧を表示
+echo "サブタスク:"
+python3 - "$JSON" <<'PYEOF'
+import sys, json
+data = json.loads(sys.argv[1])
+for i, t in enumerate(data['tasks'], 1):
+    print(f"  {i}. [{t['id']}] {t['description']}")
+PYEOF
+echo ""
+
+# 各サブタスクの worktree を作成して worker を起動
+python3 - "$JSON" <<'PYEOF' | while IFS=$'\t' read -r task_id task_desc; do
+import sys, json
+data = json.loads(sys.argv[1])
+for t in data['tasks']:
+    print(t['id'] + '\t' + t['description'])
+PYEOF
+    worktree_path=$(worktree_create "$SESSION" "$task_id" "$TARGET")
+
+    # 新しい tmux ウィンドウでワーカーを起動
+    window_name="${task_id}"
+    tmux new-window -t "$SESSION" -n "$window_name"
+    tmux send-keys -t "${SESSION}:${window_name}" \
+        "SYNAPSE_ROOT=$(printf '%q' "$SYNAPSE_ROOT") bash $(printf '%q' "${SYNAPSE_ROOT}/bin/_worker") $(printf '%q' "$worktree_path") $(printf '%q' "$task_id") $(printf '%q' "$task_desc")" \
+        Enter
+done
+
+echo "全エージェントを起動しました。"
+echo ""
+echo "  Ctrl+b → 数字キー / n/p キーでウィンドウを切り替え"
+echo "  Ctrl+b d            でセッションをデタッチ"
+echo ""
