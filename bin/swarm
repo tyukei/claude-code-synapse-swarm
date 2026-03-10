@@ -8,20 +8,17 @@ SYNAPSE_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 TARGET="$(pwd)"
 SESSION="swarm-$(date +%H%M%S)"
 
-if ! command -v tmux &>/dev/null; then
-    echo "エラー: tmuxが必要です（brew install tmux）"
+if ! command -v cmux &>/dev/null; then
+    echo "エラー: cmux が必要です"
     exit 1
 fi
 
 if ! command -v claude &>/dev/null; then
-    echo "エラー: Claude CLIが必要です"
+    echo "エラー: Claude CLI が必要です"
     exit 1
 fi
 
-# tmuxセッションを作成してオーケストレーターを起動
-tmux new-session -d -s "$SESSION" -x 220 -y 50
-tmux send-keys -t "$SESSION" \
-    "SYNAPSE_ROOT=$(printf '%q' "$SYNAPSE_ROOT") TARGET=$(printf '%q' "$TARGET") SESSION=$(printf '%q' "$SESSION") bash $(printf '%q' "${SYNAPSE_ROOT}/bin/_orchestrate")" \
-    Enter
-
-tmux attach-session -t "$SESSION"
+# オーケストレーターを新しい cmux ワークスペースで起動
+cmux new-workspace \
+    --command "SYNAPSE_ROOT=$(printf '%q' "$SYNAPSE_ROOT") TARGET=$(printf '%q' "$TARGET") SESSION=$(printf '%q' "$SESSION") bash $(printf '%q' "${SYNAPSE_ROOT}/bin/_orchestrate")" \
+    --name "swarm: orchestrator"

@@ -1,10 +1,10 @@
 # Synapse Swarm — CLAUDE.md
 
 タスクを複数の Claude Code エージェントに分解して並列実行するツール。
-tmux + git worktree で各エージェントが独立した環境で作業する。
+cmux + git worktree で各エージェントが独立した環境で作業する。
 
 ## 構造
-- `bin/swarm`        — エントリーポイント。tmux セッションを作成して起動
+- `bin/swarm`        — エントリーポイント。cmux に orchestrator ワークスペースを開く
 - `bin/_orchestrate` — タスク入力・分解・エージェント起動（内部用）
 - `bin/_worker`      — 単一サブタスクを worktree で実行（内部用）
 - `lib/worktree.sh`  — git worktree の作成ヘルパー
@@ -22,3 +22,4 @@ cd /path/to/your/project
 - スクリプトは `bash` + `set -euo pipefail`
 - worktree は `TARGET/.worktrees/SESSION/TASK_ID/` に作成
 - ブランチ名は `swarm/SESSION/TASK_ID`
+- ワークスペース名は `swarm: TASK_ID`

@@ -30,7 +30,7 @@ if [[ -n "$(git status --porcelain)" ]]; then
     git add -A
     git commit -m "swarm(${task_id}): ${task_desc}"
     echo ""
-    echo "変更をコミットしました: swarm/${task_id}"
+    echo "コミット完了: swarm/${task_id}"
 else
     echo ""
     echo "変更なし"
@@ -38,4 +38,4 @@ fi
 
 echo ""
 echo "━━━ 完了 ━━━"
-read -p "Enterで終了..."
+read -p "Enterで閉じる..."

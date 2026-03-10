@@ -19,11 +19,11 @@ echo ""
 
 if [[ -z "$TASK" ]]; then
     echo "タスクが入力されていません。終了します。"
+    read -p "Enterで閉じる..."
     exit 0
 fi
 
 echo "タスクを分解中..."
-echo ""
 
 # オーケストレータープロンプトを構築
 PROMPT_TEMPLATE=$(cat "${SYNAPSE_ROOT}/roles/orchestrator.md")
@@ -41,12 +41,10 @@ import sys, re, json
 
 text = sys.argv[1] if len(sys.argv) > 1 else sys.stdin.read()
 
-# ```json ... ``` ブロックを優先
 m = re.search(r'```(?:json)?\s*(\{.*?\})\s*```', text, re.DOTALL)
 if m:
     print(m.group(1))
 else:
-    # 生の JSON オブジェクトを探す
     m = re.search(r'\{.*\}', text, re.DOTALL)
     if m:
         print(m.group(0))
@@ -56,11 +54,12 @@ PYEOF
 if [[ -z "$JSON" ]]; then
     echo "エラー: タスクの分解に失敗しました。Claudeの出力:"
     echo "$RAW"
-    read -p "Enterで終了..."
+    read -p "Enterで閉じる..."
     exit 1
 fi
 
 # サブタスク一覧を表示
+echo ""
 echo "サブタスク:"
 python3 - "$JSON" <<'PYEOF'
 import sys, json
@@ -69,8 +68,10 @@ for i, t in enumerate(data['tasks'], 1):
     print(f"  {i}. [{t['id']}] {t['description']}")
 PYEOF
 echo ""
+echo "エージェントを起動中..."
+echo ""
 
-# 各サブタスクの worktree を作成して worker を起動
+# 各サブタスクの worktree を作成して cmux ワークスペースで worker を起動
 python3 - "$JSON" <<'PYEOF' | while IFS=$'\t' read -r task_id task_desc; do
 import sys, json
 data = json.loads(sys.argv[1])
@@ -79,16 +80,14 @@ for t in data['tasks']:
 PYEOF
     worktree_path=$(worktree_create "$SESSION" "$task_id" "$TARGET")
 
-    # 新しい tmux ウィンドウでワーカーを起動
-    window_name="${task_id}"
-    tmux new-window -t "$SESSION" -n "$window_name"
-    tmux send-keys -t "${SESSION}:${window_name}" \
-        "SYNAPSE_ROOT=$(printf '%q' "$SYNAPSE_ROOT") bash $(printf '%q' "${SYNAPSE_ROOT}/bin/_worker") $(printf '%q' "$worktree_path") $(printf '%q' "$task_id") $(printf '%q' "$task_desc")" \
-        Enter
+    cmux new-workspace \
+        --command "SYNAPSE_ROOT=$(printf '%q' "$SYNAPSE_ROOT") bash $(printf '%q' "${SYNAPSE_ROOT}/bin/_worker") $(printf '%q' "$worktree_path") $(printf '%q' "$task_id") $(printf '%q' "$task_desc")" \
+        --name "swarm: ${task_id}"
+
+    echo "  起動: ${task_id}"
 done
 
-echo "全エージェントを起動しました。"
 echo ""
-echo "  Ctrl+b → 数字キー / n/p キーでウィンドウを切り替え"
-echo "  Ctrl+b d            でセッションをデタッチ"
+echo "全エージェントを起動しました。cmux のワークスペースを切り替えて確認してください。"
 echo ""
+read -p "Enterで閉じる..."
