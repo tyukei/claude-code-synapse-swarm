@@ -4,7 +4,8 @@
       "Bash(git -C /Users/keitanakata/Documents/git/Random/claude-code-synapse-swarm status)",
       "Bash(git add lib/cmux.sh lib/mux.sh README.ja.md README.md bin/spawn-agent bin/swarm bin/teardown config/swarm.yaml)",
       "Bash(git commit:*)",
-      "Bash(git push)"
+      "Bash(git push)",
+      "Bash(git add .devcontainer/ Dockerfile lib/mux.sh README.md README.ja.md)"
     ]
   }
 }
