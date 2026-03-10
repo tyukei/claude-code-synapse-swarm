@@ -35,19 +35,24 @@ Inspired by **brain-like functional specialization**: rather than running identi
 ## Prerequisites
 
 - [Claude Code](https://docs.anthropic.com/en/docs/claude-code) CLI (`claude`)
-- [tmux](https://github.com/tmux/tmux) (for parallel mode)
+- **cmux** or **tmux** for parallel mode (auto-detected; sequential mode needs neither)
 - Git 2.15+ (for worktree support)
 - Bash 4+
 
 ```bash
-# macOS
+# tmux (macOS)
 brew install tmux
+
+# cmux is bundled with the cmux terminal app
+# https://cmux.app
 
 # Verify
 claude --version
-tmux -V
+tmux -V   # or: cmux ping
 git --version
 ```
+
+The swarm auto-detects the available backend: **cmux takes priority** if its daemon is running, then tmux, then sequential fallback.
 
 ## Quick Start
 
@@ -56,16 +61,20 @@ git --version
 git clone <this-repo> .synapse
 cd .synapse
 
-# Run with an inline task
+# Run with an inline task (auto-detects cmux or tmux)
 bin/swarm --task "Build a REST API with user authentication" --roles planner,architect,coder,tester
+
+# Force a specific backend
+bin/swarm --task "..." --mux cmux    # cmux workspaces + sidebar
+bin/swarm --task "..." --mux tmux    # tmux windows
 
 # Or use a task file
 cp tasks/example.yaml tasks/my-task.yaml
 # Edit tasks/my-task.yaml with your task description
 bin/swarm tasks/my-task.yaml
 
-# Sequential mode (no tmux required)
-bin/swarm --task "Fix the login bug" --roles coder,tester --no-tmux
+# Sequential mode (no multiplexer required)
+bin/swarm --task "Fix the login bug" --roles coder,tester --no-mux
 ```
 
 ## Agent Roles
@@ -145,8 +154,14 @@ This will:
 
 ### 3. Monitor Progress
 
+**With cmux:**
+- Switch to the cmux terminal window
+- Each agent runs in its own workspace named `<session>/<role>`
+- Live status badges appear in the sidebar per agent (running → done ✓ / error ✗)
+- Progress bar shows each agent's phase (starting → running → committing → done)
+
+**With tmux:**
 ```bash
-# Attach to the tmux session
 tmux attach -t synapse-YYYYMMDD-HHMMSS
 
 # Navigate between agent panes

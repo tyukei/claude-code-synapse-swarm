@@ -1,6 +1,10 @@
 # Synapse Swarm — Main Configuration
 
-# tmux session name prefix
+# Multiplexer backend: auto | tmux | cmux | none
+# auto: prefers cmux if running, falls back to tmux, then sequential
+mux_backend: auto
+
+# Session name prefix
 session_prefix: synapse
 
 # Where worktrees are created (relative to repo root)

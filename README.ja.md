@@ -35,19 +35,24 @@
 ## 前提条件
 
 - [Claude Code](https://docs.anthropic.com/en/docs/claude-code) CLI (`claude`)
-- [tmux](https://github.com/tmux/tmux)（並列モード使用時）
+- **cmux** または **tmux**（並列モード使用時 — 自動検出）
 - Git 2.15+（worktree サポート）
 - Bash 4+
 
 ```bash
-# macOS
+# tmux (macOS)
 brew install tmux
+
+# cmux は cmux ターミナルアプリに付属
+# https://cmux.app
 
 # 確認
 claude --version
-tmux -V
+tmux -V   # または: cmux ping
 git --version
 ```
+
+スウォームは利用可能なバックエンドを自動検出します: **cmux のデーモンが起動中なら cmux を優先**、次に tmux、最後にシーケンシャルモードへフォールバックします。
 
 ## クイックスタート
 
@@ -56,16 +61,20 @@ git --version
 git clone <this-repo> .synapse
 cd .synapse
 
-# インラインタスクで実行
+# インラインタスクで実行（cmux または tmux を自動検出）
 bin/swarm --task "ユーザー認証付き REST API を構築する" --roles planner,architect,coder,tester
+
+# バックエンドを明示的に指定
+bin/swarm --task "..." --mux cmux    # cmux ワークスペース + サイドバー
+bin/swarm --task "..." --mux tmux    # tmux ウィンドウ
 
 # タスクファイルを使用する場合
 cp tasks/example.yaml tasks/my-task.yaml
 # tasks/my-task.yaml をタスク内容に合わせて編集
 bin/swarm tasks/my-task.yaml
 
-# シーケンシャルモード（tmux 不要）
-bin/swarm --task "ログインバグを修正する" --roles coder,tester --no-tmux
+# シーケンシャルモード（マルチプレクサ不要）
+bin/swarm --task "ログインバグを修正する" --roles coder,tester --no-mux
 ```
 
 ## エージェントロール
@@ -89,11 +98,13 @@ synapse-swarm/
 │   ├── spawn-agent     # 単一エージェントを worktree で起動
 │   ├── collect         # 全エージェントの結果を収集
 │   ├── merge           # エージェントブランチを安全にマージ
-│   └── teardown        # worktree と tmux のクリーンアップ
+│   └── teardown        # worktree とマルチプレクサのクリーンアップ
 ├── lib/
 │   ├── log.sh          # ログユーティリティ
 │   ├── worktree.sh     # git worktree 管理
-│   ├── tmux.sh         # tmux セッション/ペイン管理
+│   ├── mux.sh          # マルチプレクサ自動検出・統一インターフェース
+│   ├── tmux.sh         # tmux バックエンド
+│   ├── cmux.sh         # cmux バックエンド（ワークスペース・サイドバー対応）
 │   └── task.sh         # タスク解析とプロンプト描画
 ├── roles/
 │   ├── planner.md      # planner 用プロンプトテンプレート
@@ -138,13 +149,20 @@ bin/swarm tasks/my-feature.yaml
 ```
 
 実行内容:
-- エージェントごとに1つのペインを持つ tmux セッションを作成
+- エージェントごとにマルチプレクサのペイン/ワークスペースを作成（cmux または tmux を自動検出）
 - エージェントごとに git worktree を作成（独立したブランチ）
 - フェーズ順でエージェントを実行（planner/memory → architect/coder → tester/reviewer/docs）
 - 各エージェントにロール別プロンプト + タスク説明を渡す
 
 ### 3. 進捗を確認する
 
+**cmux を使用している場合:**
+- cmux ターミナルウィンドウに切り替える
+- 各エージェントは `<session>/<role>` という名前のワークスペースで動作
+- サイドバーにエージェントごとのライブステータスバッジが表示（running → done ✓ / error ✗）
+- プログレスバーで各エージェントのフェーズを確認（starting → running → committing → done）
+
+**tmux を使用している場合:**
 ```bash
 # tmux セッションにアタッチ
 tmux attach -t synapse-YYYYMMDD-HHMMSS

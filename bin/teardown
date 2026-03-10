@@ -9,7 +9,7 @@ export SYNAPSE_ROOT
 
 source "${SYNAPSE_ROOT}/lib/log.sh"
 source "${SYNAPSE_ROOT}/lib/worktree.sh"
-source "${SYNAPSE_ROOT}/lib/tmux.sh"
+source "${SYNAPSE_ROOT}/lib/mux.sh"
 
 session="${1:?Usage: teardown <session> [--keep-branches]}"
 keep_branches=false
@@ -17,8 +17,8 @@ keep_branches=false
 
 log_section "Tearing down session: ${session}"
 
-# Kill tmux session
-tmux_kill_session "$session" 2>/dev/null || true
+# Kill mux session (works for both tmux and cmux)
+mux_kill_session "$session" 2>/dev/null || true
 
 # Remove worktrees
 roles=$(worktree_list "$session")

@@ -2,7 +2,8 @@
 set -euo pipefail
 
 # Synapse Swarm — Main orchestrator
-# Spawns multiple Claude Code agents in tmux panes, each in its own worktree.
+# Spawns multiple Claude Code agents in mux panes, each in its own worktree.
+# Supports tmux and cmux backends (auto-detected).
 #
 # Usage:
 #   swarm <task_file>                  — Run from a task YAML file
@@ -14,7 +15,6 @@ export SYNAPSE_ROOT
 
 source "${SYNAPSE_ROOT}/lib/log.sh"
 source "${SYNAPSE_ROOT}/lib/worktree.sh"
-source "${SYNAPSE_ROOT}/lib/tmux.sh"
 source "${SYNAPSE_ROOT}/lib/task.sh"
 
 # ── Parse arguments ──────────────────────────────────────────────
@@ -31,8 +31,15 @@ Options:
   --task, -t     Inline task description
   --roles, -r    Comma-separated list of roles (default: planner,architect,coder,tester,reviewer)
   --model, -m    Model override for all agents (default: opus)
-  --no-tmux      Run agents sequentially without tmux
+  --mux          Multiplexer backend: auto | tmux | cmux | none (default: auto)
+  --no-mux       Run agents sequentially without a multiplexer
   --help, -h     Show this help
+
+Multiplexer backends:
+  auto   Prefer cmux if running, fall back to tmux, then sequential
+  cmux   Use cmux (workspaces + sidebar status)
+  tmux   Use tmux (windows + panes)
+  none   Sequential mode, no multiplexer required
 USAGE
     exit 0
 }
@@ -41,14 +48,15 @@ TASK_FILE=""
 TASK_DESC=""
 ROLES=""
 MODEL="opus"
-USE_TMUX=true
+USE_MUX=true
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
         --task|-t)    TASK_DESC="$2"; shift 2 ;;
         --roles|-r)   ROLES="$2"; shift 2 ;;
         --model|-m)   MODEL="$2"; shift 2 ;;
-        --no-tmux)    USE_TMUX=false; shift ;;
+        --mux)        export MUX_BACKEND="$2"; shift 2 ;;
+        --no-mux)     USE_MUX=false; shift ;;
         --help|-h)    usage ;;
         *)
             if [[ -f "$1" ]]; then
@@ -60,6 +68,15 @@ while [[ $# -gt 0 ]]; do
             shift ;;
     esac
 done
+
+# Load mux abstraction (auto-detects cmux vs tmux)
+source "${SYNAPSE_ROOT}/lib/mux.sh"
+
+# Disable mux if explicitly requested or none available
+if ! $USE_MUX || ! mux_available; then
+    USE_MUX=false
+    export MUX_BACKEND=none
+fi
 
 # ── Resolve task description and roles ───────────────────────────
 if [[ -n "$TASK_FILE" ]]; then
@@ -90,7 +107,7 @@ log_info "Session:  ${SESSION}"
 log_info "Task:     ${TASK_DESC}"
 log_info "Roles:    ${ROLES}"
 log_info "Model:    ${MODEL}"
-log_info "tmux:     ${USE_TMUX}"
+log_info "Mux:      $(mux_backend)"
 echo ""
 
 # ── Ensure we have a clean base ──────────────────────────────────
@@ -109,9 +126,9 @@ done
 PHASES=($(echo "${!PHASE_ROLES[@]}" | tr ' ' '\n' | sort -n))
 
 # ── Run agents ──────────────────────────────────────────────────
-if $USE_TMUX; then
-    # tmux mode: create session and spawn panes
-    tmux_create_session "$SESSION"
+if $USE_MUX; then
+    # Mux mode: create session and spawn panes/workspaces
+    mux_create_session "$SESSION"
 
     for phase in "${PHASES[@]}"; do
         roles_in_phase=(${PHASE_ROLES[$phase]})
@@ -119,23 +136,35 @@ if $USE_TMUX; then
 
         for role in "${roles_in_phase[@]}"; do
             spawn_cmd="${SYNAPSE_ROOT}/bin/spawn-agent ${SESSION} ${role} '${TASK_DESC}' ${MODEL}"
-            tmux_spawn_pane "$SESSION" "$role" "$spawn_cmd"
+            mux_spawn_pane "$SESSION" "$role" "$spawn_cmd"
         done
 
-        # Wait for this phase to complete before starting the next
+        # Wait for this phase before starting the next
         if [[ "$phase" != "${PHASES[-1]}" ]]; then
             log_info "Waiting for phase ${phase} to complete..."
-            tmux_wait_all "$SESSION" "${roles_in_phase[@]}"
+            mux_wait_all "$SESSION" "${roles_in_phase[@]}"
         fi
     done
 
-    log_ok "All agents spawned. Attaching to tmux session..."
+    log_ok "All agents spawned."
     echo ""
-    echo "  tmux attach -t ${SESSION}"
-    echo ""
-    echo "Useful commands:"
-    echo "  Ctrl-b n/p  — Next/previous agent pane"
-    echo "  Ctrl-b d    — Detach from session"
+
+    case "$(mux_backend)" in
+        cmux)
+            echo "Agents are running in cmux workspaces."
+            echo "Workspace names: ${SESSION}/<role>"
+            echo ""
+            echo "Sidebar shows live status for each agent."
+            ;;
+        tmux)
+            echo "  tmux attach -t ${SESSION}"
+            echo ""
+            echo "Useful commands:"
+            echo "  Ctrl-b n/p  — Next/previous agent pane"
+            echo "  Ctrl-b d    — Detach from session"
+            ;;
+    esac
+
     echo ""
     echo "When done, collect results:"
     echo "  bin/collect ${SESSION}"
