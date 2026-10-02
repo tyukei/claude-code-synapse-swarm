@@ -17,17 +17,16 @@ if ! command -v claude &>/dev/null; then
     exit 1
 fi
 
-# 現在のワークスペース一覧を取得（差分で新しいワークスペースを特定するため）
-WS_BEFORE=$(cmux --id-format refs list-workspaces 2>/dev/null | grep "^workspace:" | sort)
-
-# オーケストレーターを新しいワークスペースで起動
 ORCH_CMD="SYNAPSE_ROOT=$(printf '%q' "$SYNAPSE_ROOT") TARGET=$(printf '%q' "$TARGET") SESSION=$(printf '%q' "$SESSION") bash $(printf '%q' "${SYNAPSE_ROOT}/bin/_orchestrate")"
-cmux new-workspace --command "$ORCH_CMD"
 
-# 新しいワークスペースの ref を特定してリネーム
-sleep 0.5
-WS_AFTER=$(cmux --id-format refs list-workspaces 2>/dev/null | grep "^workspace:" | sort)
-NEW_WS=$(comm -13 <(echo "$WS_BEFORE") <(echo "$WS_AFTER") | tail -1)
-if [[ -n "$NEW_WS" ]]; then
-    cmux rename-workspace --workspace "$NEW_WS" "swarm" 2>/dev/null || true
+# ワークスペースを作成（出力: "OK <UUID>"）
+result=$(cmux new-workspace --command "$ORCH_CMD")
+WS_UUID=$(echo "$result" | awk '{print $2}')
+
+if [[ -z "$WS_UUID" ]]; then
+    echo "エラー: ワークスペースの作成に失敗しました（出力: ${result}）"
+    exit 1
 fi
+
+cmux rename-workspace --workspace "$WS_UUID" "swarm" 2>/dev/null || true
+echo "ワークスペース 'swarm' を開きました（cmux に切り替えてください）"

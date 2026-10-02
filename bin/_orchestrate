@@ -7,14 +7,16 @@ set -euo pipefail
 source "${SYNAPSE_ROOT}/lib/worktree.sh"
 
 # ── 右ペインを作成してワーカー用に確保 ──────────────────────────
-PANE_BEFORE=$(cmux list-panes 2>/dev/null | grep "^pane:" | sort)
+# 作成前に現在のペイン一覧を取得（左ペイン特定用）
+LEFT_PANE=$(cmux --id-format refs list-panes 2>/dev/null | grep "^pane:" | head -1 || true)
+
 cmux new-pane --direction right 2>/dev/null
-sleep 0.4
-PANE_AFTER=$(cmux list-panes 2>/dev/null | grep "^pane:" | sort)
-RIGHT_PANE=$(comm -13 <(echo "$PANE_BEFORE") <(echo "$PANE_AFTER") | tail -1)
+sleep 0.5
+
+# 作成後の最後のペイン = 新しい右ペイン
+RIGHT_PANE=$(cmux --id-format refs list-panes 2>/dev/null | grep "^pane:" | tail -1 || true)
 
 # 左ペイン（オーケストレーター）にフォーカスを戻す
-LEFT_PANE=$(echo "$PANE_BEFORE" | head -1)
 cmux focus-pane --pane "$LEFT_PANE" 2>/dev/null || true
 
 # ── ユーザー入力 ──────────────────────────────────────────────
@@ -87,11 +89,10 @@ PYEOF
     worktree_path=$(worktree_create "$SESSION" "$task_id" "$TARGET")
 
     # 右ペインに新しいサーフェス（タブ）を作成
-    SURF_BEFORE=$(cmux list-pane-surfaces --pane "$RIGHT_PANE" 2>/dev/null | grep "^surface:" | sort)
     cmux new-surface --pane "$RIGHT_PANE" --type terminal 2>/dev/null
-    sleep 0.8  # シェル起動待ち
-    SURF_AFTER=$(cmux list-pane-surfaces --pane "$RIGHT_PANE" 2>/dev/null | grep "^surface:" | sort)
-    NEW_SURF=$(comm -13 <(echo "$SURF_BEFORE") <(echo "$SURF_AFTER") | tail -1)
+    sleep 1.0  # シェル起動待ち
+    # 作成後の最後のサーフェス = 新しいもの
+    NEW_SURF=$(cmux --id-format refs list-pane-surfaces --pane "$RIGHT_PANE" 2>/dev/null | grep "^surface:" | tail -1 || true)
 
     # タブ名をタスクIDに設定
     cmux rename-tab --surface "$NEW_SURF" "$task_id" 2>/dev/null || true
